@@ -27,10 +27,14 @@ public class CodeGenerator {
      */
     public static void main(String[] args) throws TemplateException, IOException {
         // 指定生成参数
-        String packageName = "com.sun.springbootinit";
-        String dataName = "用户评论";
-        String dataKey = "userComment";
-        String upperDataKey = "UserComment";
+        //要生成的报名
+        String packageName = "com.sun.mianshi";
+        //要生成表的中文名称
+        String dataName = "题库题目关联";
+        //要生成表的唯一标识
+        String dataKey = "questionBankQuestion";
+        //大写的key
+        String upperDataKey = "QuestionBankQuestion";
 
         // 封装生成参数
         Map<String, Object> dataModel = new HashMap<>();

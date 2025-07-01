@@ -62,6 +62,10 @@ public class User implements Serializable {
      * 用户角色：user/admin/ban
      */
     private String userRole;
+    /**
+     * 编辑时间
+     */
+    private Date editTime;
 
     /**
      * 创建时间
