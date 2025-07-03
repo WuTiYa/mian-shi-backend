@@ -10,10 +10,7 @@ import com.sun.mianshi.common.ResultUtils;
 import com.sun.mianshi.constant.UserConstant;
 import com.sun.mianshi.exception.BusinessException;
 import com.sun.mianshi.exception.ThrowUtils;
-import com.sun.mianshi.model.dto.question.QuestionAddRequest;
-import com.sun.mianshi.model.dto.question.QuestionEditRequest;
-import com.sun.mianshi.model.dto.question.QuestionQueryRequest;
-import com.sun.mianshi.model.dto.question.QuestionUpdateRequest;
+import com.sun.mianshi.model.dto.question.*;
 import com.sun.mianshi.model.entity.Question;
 import com.sun.mianshi.model.entity.User;
 import com.sun.mianshi.model.vo.QuestionVO;
@@ -261,6 +258,19 @@ public class QuestionController {
         Page<Question> questionPage = questionService.searchQuestionEs(questionQueryRequest);
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
-
+    /**
+     * 批量删除题目（仅管理员可用）
+     *
+     * @param questionBatchDeleteRequest
+     * @return
+     */
+    @PostMapping("/delete/batch")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> batchDeleteQuestions(@RequestBody QuestionBatchDeleteRequest questionBatchDeleteRequest) {
+        ThrowUtils.throwIf(questionBatchDeleteRequest == null, ErrorCode.PARAMS_ERROR);
+        List<Long> questionIdList = questionBatchDeleteRequest.getQuestionIdList();
+        questionService.batchDeleteQuestion(questionIdList);
+        return ResultUtils.success(true);
+    }
     // endregion
 }
