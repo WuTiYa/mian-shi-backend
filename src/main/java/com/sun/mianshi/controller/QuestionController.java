@@ -1,6 +1,12 @@
 package com.sun.mianshi.controller;
 
 import cn.hutool.json.JSONUtil;
+import com.alibaba.csp.sentinel.Entry;
+import com.alibaba.csp.sentinel.EntryType;
+import com.alibaba.csp.sentinel.SphU;
+import com.alibaba.csp.sentinel.Tracer;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeException;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sun.mianshi.annotation.AuthCheck;
 import com.sun.mianshi.common.BaseResponse;
@@ -11,8 +17,10 @@ import com.sun.mianshi.constant.UserConstant;
 import com.sun.mianshi.exception.BusinessException;
 import com.sun.mianshi.exception.ThrowUtils;
 import com.sun.mianshi.model.dto.question.*;
+import com.sun.mianshi.model.dto.questionbank.QuestionBankQueryRequest;
 import com.sun.mianshi.model.entity.Question;
 import com.sun.mianshi.model.entity.User;
+import com.sun.mianshi.model.vo.QuestionBankVO;
 import com.sun.mianshi.model.vo.QuestionVO;
 import com.sun.mianshi.service.QuestionBankQuestionService;
 import com.sun.mianshi.service.QuestionService;
@@ -186,7 +194,61 @@ public class QuestionController {
         // 获取封装类
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
-
+    /**
+     * 分页获取题目列表（封装类-限流版）
+     *
+     * @param questionQueryRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/list/page/vo/sentinel")
+    public BaseResponse<Page<QuestionVO>> listQuestionVOByPageSentinel(@RequestBody QuestionQueryRequest questionQueryRequest,
+                                                               HttpServletRequest request) {
+        long current = questionQueryRequest.getCurrent();
+        long size = questionQueryRequest.getPageSize();
+        // 限制爬虫
+        ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
+        //基于IP限流
+        String remoteAddr = request.getRemoteAddr();
+        Entry entry = null;
+        try{
+            //上传资源
+            //1.资源名称 2.是输入资源还是输出资源 3.每次调用entry上报几次资源 4.将传递的参数上报给sentinel
+            entry = SphU.entry("listQuestionVOByPage", EntryType.IN, 1, remoteAddr);
+            //被保护的业务逻辑
+            // 查询数据库
+            Page<Question> questionPage = questionService.page(new Page<>(current, size),
+                    questionService.getQueryWrapper(questionQueryRequest));
+            // 获取封装类
+            return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
+        }catch (Throwable ex) {
+            // 业务异常
+            if (!BlockException.isBlockException(ex)) {
+                //手动处理异常需要自己上报异常
+                Tracer.trace(ex);//注意Sentinel的降级仅针对业务异常，对Sentinel限流降级本身的异常BlockException不生效。为了统计异常比例或异常数，需要手动通过Tracer.trace(ex)记录业务异常。
+                return ResultUtils.error(ErrorCode.SYSTEM_ERROR, "系统错误");
+            }
+            // 降级操作
+            if (ex instanceof DegradeException) {
+                return handleFallback(questionQueryRequest, request, ex);
+            }
+            // 限流操作
+            return ResultUtils.error(ErrorCode.SYSTEM_ERROR, "访问过于频繁，请稍后再试");
+        }
+        finally {
+            if(entry != null){
+                entry.exit(1, remoteAddr);//传什么参数，释放什么参数
+            }
+        }
+    }
+    /**
+     * listQuestionBankVOByPage 降级操作：直接返回本地数据
+     */
+    public BaseResponse<Page<QuestionVO>> handleFallback(@RequestBody QuestionQueryRequest questionQueryRequest,
+                                                             HttpServletRequest request, Throwable ex) {
+        // 可以返回本地数据或空数据
+        return ResultUtils.success(null);
+    }
     /**
      * 分页获取当前登录用户创建的题目列表
      *
