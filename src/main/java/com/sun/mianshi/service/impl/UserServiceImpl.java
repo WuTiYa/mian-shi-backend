@@ -163,7 +163,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 先判断是否已登录
         Object loginUserId = StpUtil.getLoginIdDefaultNull();
         if(loginUserId == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
 //        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
 //        User currentUser = (User) userObj;

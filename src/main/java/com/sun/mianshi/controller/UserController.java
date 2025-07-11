@@ -11,12 +11,7 @@ import com.sun.mianshi.config.WxOpenConfig;
 import com.sun.mianshi.constant.UserConstant;
 import com.sun.mianshi.exception.BusinessException;
 import com.sun.mianshi.exception.ThrowUtils;
-import com.sun.mianshi.model.dto.user.UserAddRequest;
-import com.sun.mianshi.model.dto.user.UserLoginRequest;
-import com.sun.mianshi.model.dto.user.UserQueryRequest;
-import com.sun.mianshi.model.dto.user.UserRegisterRequest;
-import com.sun.mianshi.model.dto.user.UserUpdateMyRequest;
-import com.sun.mianshi.model.dto.user.UserUpdateRequest;
+import com.sun.mianshi.model.dto.user.*;
 import com.sun.mianshi.model.entity.User;
 import com.sun.mianshi.model.vo.LoginUserVO;
 import com.sun.mianshi.model.vo.UserVO;
@@ -217,7 +212,30 @@ public class UserController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
     }
-
+    /**
+     * 编辑个人信息
+     *
+     * @param userEditRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/edit")
+    public BaseResponse<Boolean> editUser(@RequestBody UserEditRequest userEditRequest,
+                                          HttpServletRequest request) {
+        if (userEditRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        //获取当前登录的用户
+        User loginUser = userService.getLoginUser(request);
+        //构建更新对象
+        User user = new User();
+        BeanUtils.copyProperties(userEditRequest, user);
+        //设置编辑的用户id为自己
+        user.setId(loginUser.getId());
+        boolean result = userService.updateById(user);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        return ResultUtils.success(true);
+    }
     /**
      * 根据 id 获取用户（仅管理员）
      *
@@ -316,6 +334,8 @@ public class UserController {
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
     }
+
+
     /**
      * 添加用户签到记录
      *
