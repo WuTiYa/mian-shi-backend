@@ -201,3 +201,5 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - com.sun.mianshi.controller
+ai:
+  apiKey:

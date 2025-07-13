@@ -1,6 +1,8 @@
 package com.sun.mianshi.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -12,7 +14,9 @@ import com.sun.mianshi.common.ErrorCode;
 import com.sun.mianshi.common.ResultUtils;
 import com.sun.mianshi.constant.CommonConstant;
 import com.sun.mianshi.constant.UserConstant;
+import com.sun.mianshi.exception.BusinessException;
 import com.sun.mianshi.exception.ThrowUtils;
+import com.sun.mianshi.manager.AiManager;
 import com.sun.mianshi.mapper.QuestionMapper;
 import com.sun.mianshi.model.dto.question.QuestionEsDTO;
 import com.sun.mianshi.model.dto.question.QuestionQueryRequest;
@@ -48,6 +52,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
@@ -64,6 +71,8 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     private QuestionBankQuestionService questionBankQuestionService;
     @Resource
     private ElasticsearchRestTemplate elasticsearchRestTemplate;
+    @Resource
+    private AiManager aiManager;
     /**
      * 校验数据
      *
@@ -337,6 +346,85 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         }
     }
 
+    /**
+     * AI生成题目
+     *
+     * @param questionType 题目类型
+     * @param number 题目数量
+     * @param user 用户
+     * @return true / false
+     */
+    @Override
+    public boolean aiGenerateQuestion(String questionType, int number, User user) {
+        if(ObjectUtil.hasEmpty(questionType, number, user)){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+        //1.定义系统Prompt
+        String systemPrompt = "你是一位专业的程序员面试官，你要帮我生成 {数量} 道 {方向} 面试题，要求输出格式如下：\n" +
+                "\n" +
+                "1. 什么是 Java 中的反射？\n" +
+                "2. Java 8 中的 Stream API 有什么作用？\n" +
+                "3. xxxxxx\n" +
+                "\n" +
+                "除此之外，请不要输出任何多余的内容，不要输出开头、也不要输出结尾，只输出上面的列表。\n" +
+                "\n" +
+                "接下来我会给你要生成的题目{数量}、以及题目{方向}\n";
+        //2.拼接用户Prompt
+        String userPrompt = String.format("题目数量：%s，题目方向：%s",number, questionType);
+        //3.调用AI生成题目
+        String answer = aiManager.doChat(systemPrompt, userPrompt);
+        //4.对题目进行处理
+        //按行拆分
+        List<String> lines = Arrays.asList(answer.split("\n"));
+        //移除序号和 `
+        List<String> titleList = lines.stream()
+                .map(line -> StrUtil.removePrefix(line, StrUtil.subBefore(line, " ",false)))
+                .map(line -> line.replace("`","")) //移除
+                .collect(Collectors.toList());
+        //5.创建线程池
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(titleList.size(), 10)); // 限制最大并发数
+        // 6.并行生成题目和题解
+        List<CompletableFuture<Question>> futures = titleList.stream()
+                .map(title -> CompletableFuture.supplyAsync(() -> {
+                    Question question = new Question();
+                    question.setTitle(title);
+                    question.setUserId(user.getId());
+                    question.setTags("[\"AI生成待审核\"]");
+                    question.setAnswer(aiGenerateQuestionAnswer(title));
+                    return question;
+                }, executor))
+                .collect(Collectors.toList());
+
+        List<Question> questionList = futures.stream()
+                .map(CompletableFuture::join)
+                .collect(Collectors.toList());
+
+        executor.shutdown(); // 关闭线程池
+        boolean result = this.saveBatch(questionList);
+        if(!result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "保存题目失败");
+        }
+        return true;
+    }
+    /*
+    * AI生成题解
+    * */
+    private String aiGenerateQuestionAnswer(String questionTitle){
+        //1.定义系统Prompt
+        String systemPrompt = "你是一位专业的程序员面试官，我会给你一道面试题，请帮我生成详细的题解。要求如下：\n" +
+                "\n" +
+                "1. 题解的语句要自然流畅\n" +
+                "2. 题解可以先给出总结性的回答，再详细解释\n" +
+                "3. 要使用 Markdown 语法输出\n" +
+                "\n" +
+                "除此之外，请不要输出任何多余的内容，不要输出开头、也不要输出结尾，只输出题解。\n" +
+                "\n" +
+                "接下来我会给你要生成的面试题\n";
+        //2.拼接用户Prompt
+        String userPrompt = String.format("面试题：%s", questionTitle);
+        //3.调用AI生成题解
+        return aiManager.doChat(systemPrompt, userPrompt);
+    }
 }
 
 

@@ -2,6 +2,7 @@ package com.sun.mianshi.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.alibaba.csp.sentinel.Entry;
 import com.alibaba.csp.sentinel.EntryType;
@@ -377,5 +378,25 @@ public class QuestionController {
         questionService.batchDeleteQuestion(questionIdList);
         return ResultUtils.success(true);
     }
-    // endregion
+    /**
+     * AI生生成题目（仅管理员可用）
+     *
+     * @param questionAIGenerateRequest
+     * @param request HTTP请求
+     * @return
+     */
+    @PostMapping("/ai/generate/question")
+    @SaCheckRole(UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> aiGenerateQuestion(@RequestBody QuestionAIGenerateRequest questionAIGenerateRequest, HttpServletRequest request) {
+        String questionType = questionAIGenerateRequest.getQuestionType();
+        int number = questionAIGenerateRequest.getNumber();
+        //校验参数
+        ThrowUtils.throwIf(StrUtil.isBlank(questionType), ErrorCode.PARAMS_ERROR, "题目类型不能为空");
+        ThrowUtils.throwIf(number <= 0, ErrorCode.PARAMS_ERROR, "题目数量必须大于0");
+        //获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+        //调用AI生成题目服务
+        boolean result = questionService.aiGenerateQuestion(questionType, number, loginUser);
+        return ResultUtils.success(true);
+    }
 }
